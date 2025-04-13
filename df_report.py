@@ -1,6 +1,7 @@
 import polars as pl
 import os
-import xlsxwriter
+from openpyxl import load_workbook
+
 
 pl.Config.set_tbl_rows(100)
 pl.Config.set_tbl_width_chars(9999)
@@ -8,10 +9,73 @@ pl.Config.set_fmt_str_lengths(100)
 
 files = os.listdir('Reports')
 
-def add_items(data:dict) -> pl.dataframe:
-    # df_report = pl.from_dicts(data, schema=["items"])
+def write_report_demontage(data:list|dict):
+
+    #демонтаж
+    wb = load_workbook("Reports/template.xlsx")
+    ws = wb['демонтаж']
+
+    start_row = 6
+
+    for i in range(len(data)):
+        if (ws[f"A{start_row}"].value is None or ws[f"A{start_row}"].value == ''):
+            print(start_row)
+            ws[f"A{start_row}"].value = data[i]["sap"]
+            ws[f"B{start_row}"].value = data[i]["name"]
+
+            try: #заглушка
+                ws[f"C{start_row}"].value = data[i]["baseStation"]
+            except:
+                ws[f"C{start_row}"].value = 'не указано'
+
+            ws[f"D{start_row}"].value = data[i]["destination"]
+            ws[f"E{start_row}"].value = data[i]["type"]
+
+            start_row += 1
+        else:
+            start_row += 1
+
+    ws.insert_rows(start_row + 1)  # вставляет строку **после** текущей
+    wb.save("v1_template.xlsx")
+
+def write_report_montage(data:list|dict):
+
+    wb = load_workbook("Reports/template.xlsx")
+    ws = wb['монтаж']
+
+    start_row_montage = 9
+    for i in range(len(data)):
+        if data[i]['type'] == 'montage':
+            if (ws[f"A{start_row_montage}"].value is None or ws[f"A{start_row_montage}"].value == ''):
+                ws[f"A{start_row_montage}"].value = data[i]["name"]
+                ws[f"B{start_row_montage}"].value = 'монтаж'
+
+                try:  # заглушка
+                    ws[f"C{start_row_montage}"].value = data[i]["baseStation"]
+                except:
+                    ws[f"C{start_row_montage}"].value = 'не указано'
+
+                ws[f"D{start_row_montage}"].value = data[i]["count"]
+
+                if data[i]["sap"] == 'ТМЦ':
+                    ws[f"E{start_row_montage}"].value = 'новое'
+                else:
+                    ws[f"E{start_row_montage}"].value = 'б/у'
+
+                start_row_montage += 1
+            else:
+                start_row_montage += 1
+        else:
+            continue
+    ws.insert_rows(start_row_montage + 1)  # вставляет строку **после** текущей
+    wb.save("v1_template.xlsx")
+
+# def new_report():
+
+def add_items(data:dict):
 
     rows = []
+
     for item in data['items']:
         row = {
             'id': item['id'],
@@ -21,12 +85,12 @@ def add_items(data:dict) -> pl.dataframe:
         }
         rows.append(row)
 
-    # Создаем DataFrame
-    df_report = pl.DataFrame(rows)
+    write_report_demontage(data=rows)
 
-    df_report.write_excel('report.xlsx', autofit=True)
+    # print(rows)
 
-    return df_report
+
+    # return rows
 
 
 def new_report(filename: str) -> pl.dataframe:
@@ -71,5 +135,7 @@ def read_report():
         combined_dem = pl.concat([combined_dem, df_report_d], how='vertical')
 
     return combined_dem, combined_mon
-#
-# print(read_report())
+
+data =[{'id': '140000071873-34', 'type': 'demontage', 'destination': 'Не выбрано', 'name': 'Приемопередающий модуль FRMF 6TX800 360W', 'count': 1, 'baseStation': 'NS001588', 'sap': '140000071873'}, {'id': 'P-T221001.54.9996-639', 'type': 'montage', 'destination': 'KZ01', 'name': 'Приемопередающий модуль FRGX RFM 3 2100', 'sppElement': 'P-T221001.54.9996', 'count': 1, 'warehouse': 'KZ01', 'party': 'Z000104899', 'sap': '140000031564'}]
+write_report_montage(data=data)
+# print(data[0]['type'])
