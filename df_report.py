@@ -1,7 +1,7 @@
 import polars as pl
 import os
 from openpyxl import load_workbook
-
+from xlsxwriter import Workbook
 
 pl.Config.set_tbl_rows(100)
 pl.Config.set_tbl_width_chars(9999)
@@ -9,68 +9,83 @@ pl.Config.set_fmt_str_lengths(100)
 
 files = os.listdir('Reports')
 
-def write_report_demontage(data:list|dict):
 
-    #демонтаж
-    wb = load_workbook("Reports/template.xlsx")
-    ws = wb['демонтаж']
-
+def write_report_demontage(data: list | dict, workbook: Workbook):
+    ws = workbook['демонтаж']
     start_row = 6
 
-    for i in range(len(data)):
-        if (ws[f"A{start_row}"].value is None or ws[f"A{start_row}"].value == ''):
-            print(start_row)
-            ws[f"A{start_row}"].value = data[i]["sap"]
-            ws[f"B{start_row}"].value = data[i]["name"]
+    # Если data - словарь, преобразуем в список из одного элемента
+    if isinstance(data, dict):
+        data = [data]
 
-            try: #заглушка
-                ws[f"C{start_row}"].value = data[i]["baseStation"]
-            except:
-                ws[f"C{start_row}"].value = 'не указано'
-
-            ws[f"D{start_row}"].value = data[i]["destination"]
-            ws[f"E{start_row}"].value = data[i]["type"]
-
-            start_row += 1
-        else:
+    for item in data:
+        # Ищем первую полностью пустую строку
+        while ws[f'A{start_row}'].value not in (None, ""):
+            print(f"Строка {start_row} занята: {ws[f'A{start_row}'].value}")
             start_row += 1
 
-    ws.insert_rows(start_row + 1)  # вставляет строку **после** текущей
-    wb.save("v1_template.xlsx")
+        # Заполняем данные
+        ws[f"A{start_row}"].value = item.get("sap")
+        ws[f"B{start_row}"].value = item.get("name")
+        ws[f"C{start_row}"].value = item.get("baseStation", "не указано")  # Используем get с default
+        ws[f"D{start_row}"].value = item.get("destination")
+        ws[f"E{start_row}"].value = item.get("type")
 
-def write_report_montage(data:list|dict):
+        print(f'Демонтаж внесен в строку {start_row}')
+        start_row += 1
 
-    wb = load_workbook("Reports/template.xlsx")
-    ws = wb['монтаж']
+    # Вставляем пустую строку после последней записи
+    ws.insert_rows(start_row)
+    print(f"Добавлена пустая строка {start_row}")
 
-    start_row_montage = 9
-    for i in range(len(data)):
-        if data[i]['type'] == 'montage':
-            if (ws[f"A{start_row_montage}"].value is None or ws[f"A{start_row_montage}"].value == ''):
-                ws[f"A{start_row_montage}"].value = data[i]["name"]
-                ws[f"B{start_row_montage}"].value = 'монтаж'
 
-                try:  # заглушка
-                    ws[f"C{start_row_montage}"].value = data[i]["baseStation"]
-                except:
-                    ws[f"C{start_row_montage}"].value = 'не указано'
+def write_report_montage(data: list | dict, workbook: Workbook):
+    ws = workbook['монтаж']
+    start_row = 9
 
-                ws[f"D{start_row_montage}"].value = data[i]["count"]
+    # Унифицируем входные данные (работаем с list)
+    if isinstance(data, dict):
+        data = [data]
 
-                if data[i]["sap"] == 'ТМЦ':
-                    ws[f"E{start_row_montage}"].value = 'новое'
-                else:
-                    ws[f"E{start_row_montage}"].value = 'б/у'
-
-                start_row_montage += 1
-            else:
-                start_row_montage += 1
-        else:
+    for item in data:
+        # Пропускаем записи не типа 'montage'
+        if item.get('type') != 'montage':
             continue
-    ws.insert_rows(start_row_montage + 1)  # вставляет строку **после** текущей
+
+        # Ищем первую пустую строку
+        while ws[f'A{start_row}'].value not in (None, ""):
+            start_row += 1
+
+        # Заполняем данные
+        ws[f"A{start_row}"].value = item.get("name")
+        ws[f"B{start_row}"].value = 'монтаж'
+        ws[f"C{start_row}"].value = item.get("baseStation", "не указано")
+        ws[f"D{start_row}"].value = item.get("count")
+        ws[f"E{start_row}"].value = 'новое' if item.get("sap") == 'ТМЦ' else 'б/у'
+
+        print(f'Монтаж внесен в строку {start_row}')
+        start_row += 1
+
+    # Вставляем пустую строку после последней записи
+    if len(data) > 0:
+        ws.insert_rows(start_row)
+        print(f"Добавлена пустая строка {start_row}")
+
+
+def new_report(data:str|dict, file_name = "v1_template.xlsx"):
+    '''
+
+    :param data: словарь значений для вставки в СИМ/демонтаж (POST)
+    :param path: путь к файлу СИМ/демонтаж (по умолчанию открывается пустой шаблон)
+    :return: сохранение в excel
+    '''
+
+    os.chdir('Reports')
+    wb = load_workbook(file_name)
+    write_report_montage(data=data, workbook=wb)
+    write_report_demontage(data=data, workbook=wb)
     wb.save("v1_template.xlsx")
 
-# def new_report():
 
 def add_items(data:dict):
 
@@ -85,37 +100,12 @@ def add_items(data:dict):
         }
         rows.append(row)
 
-    write_report_demontage(data=rows)
+    new_report(data=rows)
 
     # print(rows)
 
 
     # return rows
-
-
-def new_report(filename: str) -> pl.dataframe:
-    if filename is files:
-        print(f' имя отчета: {filename} уже существует')
-        #открыть текущий отчет
-
-        df_report = pl.read_excel(filename, )
-
-    else:
-        #создать новый пустой отчет (2 листа: монтаж, демонтаж)
-        # schema_d = {
-        #     'Наименование материалов':pl.Utf8,
-        #     'Вид работ':pl.Utf8,
-        #     'БС':pl.Utf8,
-        #     'Кол-во (шт./м.)':pl.Int8,
-        #     'Материал (новое/БУ)':pl.Utf8,
-        #     'СПП-элемент':pl.Utf8,
-        #     '№ MIGO':pl.Utf8
-        # }
-        # df_report = pl.DataFrame(schema=schema_d)
-
-
-
-        return
 
 def read_report():
 
@@ -137,5 +127,5 @@ def read_report():
     return combined_dem, combined_mon
 
 data =[{'id': '140000071873-34', 'type': 'demontage', 'destination': 'Не выбрано', 'name': 'Приемопередающий модуль FRMF 6TX800 360W', 'count': 1, 'baseStation': 'NS001588', 'sap': '140000071873'}, {'id': 'P-T221001.54.9996-639', 'type': 'montage', 'destination': 'KZ01', 'name': 'Приемопередающий модуль FRGX RFM 3 2100', 'sppElement': 'P-T221001.54.9996', 'count': 1, 'warehouse': 'KZ01', 'party': 'Z000104899', 'sap': '140000031564'}]
-write_report_montage(data=data)
+new_report(data=data)
 # print(data[0]['type'])
