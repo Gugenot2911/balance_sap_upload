@@ -4,69 +4,103 @@ import json
 from flask_cors import CORS
 import os
 import balance
+from df_report import add_items
 import df_report
 import polars as pl
+from functools import wraps
 
-
+# Конфигурация Polars
 pl.Config.set_tbl_rows(100)
 pl.Config.set_tbl_width_chars(9999)
 pl.Config.set_fmt_str_lengths(100)
 
+
 class CustomJSONProvider(DefaultJSONProvider):
     def dumps(self, obj, **kwargs):
-        # Убедимся, что кириллица не преобразуется в Unicode-последовательности
         return json.dumps(obj, ensure_ascii=False, **kwargs)
 
+
 app = Flask(__name__)
-app.json_encoder = CustomJSONProvider
+app.json = CustomJSONProvider(app)
 CORS(app)
 
 
-# os.chdir(r'C:/Users/ruslan.lavrov/PycharmProjects/CA_analise/')
-# print(os.getcwd())
+def handle_errors(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            app.logger.error(f"Error in {f.__name__}: {str(e)}")
+            return jsonify({"error": str(e), "status": "error"}), 500
+
+    return wrapper
+
 
 @app.route('/balance/<string:site_name>', methods=['GET'])
-
+@handle_errors
 def balance_os(site_name):
-
     balance_site = balance.Balance(site_name=site_name)
-    refund_logistic = balance.Balance(site_name).refund()
+    balance_data = balance_site.sap_os()
+    refund_data = balance_site.refund()
 
-    response = {'balance_site': balance_site.sap_os().to_dicts(),
-                'refund_logistic': refund_logistic.to_dicts()}
+    if balance_data is None or refund_data is None:
+        return jsonify({"error": "Failed to get balance data"}), 404
 
-    return jsonify(response)
+    return jsonify({
+        "balance_site": balance_data.to_dicts(),
+        "refund_logistic": refund_data.to_dicts()
+    })
+
 
 @app.route('/storage/<string:site_name>', methods=['GET'])
-
+@handle_errors
 def balance_storage(site_name):
-
     balance_site = balance.Balance(site_name=site_name)
-    return jsonify(balance_site.sap_tmc().to_dicts())
+    storage_data = balance_site.sap_tmc()
+
+    if storage_data is None:
+        return jsonify({"error": "Storage data not found"}), 404
+
+    return jsonify(storage_data.to_dicts())
 
 
 @app.route('/report', methods=['POST'])
+@handle_errors
 def report():
     data = request.get_json()
-    report = df_report.add_items
+
     if not data:
         return jsonify({"error": "No JSON data received"}), 400
 
-    try:
-        print (data)
-        print (report(data=data))
-        return jsonify({
-            "status": "success",
-            "data": data
-        }), 200
+    if not isinstance(data, (dict, list)):
+        return jsonify({"error": "Invalid data format"}), 400
 
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "status": "error"
-        }), 500
+    result = add_items(data=data)
+    return jsonify({
+        "status": "success",
+        "result": result
+    })
+
+# @app.route('/name_report/', methods=['GET'])
+# def name_report():
+#     reports_list = df_report.files
+#
+#     for i in reports_list:
+#
+#
+#     return reports_list
 
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True, ssl_context=('cert.pem', 'key.pem'))
+    ssl_context = None
+    if os.path.exists('cert.pem') and os.path.exists('key.pem'):
+        ssl_context = ('cert.pem', 'key.pem')
+
+    app.run(
+        host='0.0.0.0',
+        port=8000,
+        debug=True,
+        ssl_context=ssl_context
+    )
