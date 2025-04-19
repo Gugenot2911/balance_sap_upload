@@ -2,6 +2,7 @@ import polars as pl
 import os
 from openpyxl import load_workbook
 from xlsxwriter import Workbook
+from typing import Dict, Union, List, Any
 
 pl.Config.set_tbl_rows(100)
 pl.Config.set_tbl_width_chars(9999)
@@ -122,15 +123,81 @@ def combine_reports():
 
     return combined_dem, combined_mon
 
-def read_reports(file:str) -> pl.dataframe:
+def read_reports(
+        file_names: Union[str, List[str]] = None,
+        template: str = 'template.xlsx',
+        as_dataframes: bool = True
+) -> Dict[str, Dict[str, Union[List[Dict[str, Any]], pl.DataFrame]]]:
+    """
+    Загрузка отчетов СИМ из одного или нескольких файлов Excel
 
-    df_report_m = pl.read_excel('Reports/' + file, sheet_name='монтаж', read_options={"header_row": 6}, infer_schema_length=0)
-    df_report_m = df_report_m.filter(pl.col('БС') != 'null')
+    Параметры:
+        file_names: имя файла (str) или список файлов (List[str]). Если None, используется template.
+        template: имя шаблонного файла (используется, если file_names не указан)
+        as_dataframes: если True - возвращает DataFrame, если False - преобразует в список словарей
 
-    df_report_d = pl.read_excel('Reports/' + file, sheet_name='демонтаж', read_options={"header_row": 4})
-    df_report_d = df_report_d.filter(pl.col('NS___') != 'null')
+    Возвращает:
+        Словарь, где:
+        - ключ: имя файла (str)
+        - значение: словарь с ключами 'монтаж' и 'демонтаж', содержащие:
+            * DataFrame (если as_dataframes=True)
+            * список словарей (если as_dataframes=False)
+    """
+    # Обработка входных параметров
+    if file_names is None:
+        files = [template]
+    elif isinstance(file_names, str):
+        files = [file_names]
+    else:
+        files = file_names
 
-    return {'монтаж':df_report_m, 'демонтаж':df_report_d}
+    result = {}
+
+    for file in files:
+        file_path = f'Reports/{file}'
+
+        try:
+            # Обработка листа 'монтаж'
+            df_montage = (
+                pl.read_excel(
+                    file_path,
+                    sheet_name='монтаж',
+                    read_options={"header_row": 6},
+                    infer_schema_length=0
+                )
+                .filter(pl.col('БС') != 'null')
+                .fill_null('')
+            )
+
+            # Обработка листа 'демонтаж'
+            df_demontage = (
+                pl.read_excel(
+                    file_path,
+                    sheet_name='демонтаж',
+                    read_options={"header_row": 4}
+                )
+                .filter(pl.col('NS___') != 'null')
+                .fill_null('')
+            )
+
+            # Преобразуем в словари если требуется
+            if not as_dataframes:
+                df_montage = df_montage.to_dicts()
+                df_demontage = df_demontage.to_dicts()
+
+            result[file] = {
+                'монтаж': df_montage,
+                'демонтаж': df_demontage
+            }
+
+        except Exception as e:
+            print(f"Ошибка при обработке файла {file}: {e}")
+            result[file] = {
+                'монтаж': [] if not as_dataframes else pl.DataFrame(),
+                'демонтаж': [] if not as_dataframes else pl.DataFrame()
+            }
+
+    return result
 
 
 # data_source = {'items': [{'id': '140000064378-0', 'type': 'demontage', 'destination': 'Не выбрано', 'data': {}}, {'id': '140000000869-1', 'type': 'demontage', 'destination': 'Не выбрано', 'data': {'name': 'Блок модема ММU2 MMU2 B ROJ2081301/10', 'count': 1, 'baseStation': 'NS001152', 'destination': 'Не выбрано', 'sap': '140000000869'}}, {'id': 'P-T223046.54.9996-6', 'type': 'montage', 'data': {}}, {'id': 'P-T225003.54.0573-681', 'type': 'montage', 'data': {'name': 'Аккумуляторная батарея\xa0 FTS 12-150 X', 'sppElement': 'P-T225003.54.0573', 'count': 1, 'warehouse': 'K026', 'destination': 'NS001152', 'party': '0002108828', 'sap': 'ТМЦ'}}]}
@@ -138,4 +205,12 @@ def read_reports(file:str) -> pl.dataframe:
 # add_items(data=data_source)
 # print()
 
-print(read_reports(file=files[1]).get('монтаж'))
+# print(read_reports(file=files[1]))
+
+def upload_reports():
+    # file_name = request.get_json()
+    report = read_reports(files[1:2], as_dataframes=False)
+
+    return report
+
+# print(upload_reports())

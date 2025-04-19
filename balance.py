@@ -44,8 +44,7 @@ class Balance:
             "Лаукар": 'KZ03|K018'
         }
 
-        paths = ['//corp.tele2.ru/NSMRFolders/MR_LOGISTIC/Новосибирск/Возврат/IN 2025 Актуальный.xlsx',
-                '//corp.tele2.ru/NSMRFolders/MR_LOGISTIC/Новосибирск/Возврат/IN 2024 Архив.xlsx']
+        paths = ['//corp.tele2.ru/NSMRFolders/MR_LOGISTIC/Новосибирск/Возврат/IN 2025 Актуальный.xlsx']
 
         result_df = pl.DataFrame()
 
@@ -117,7 +116,7 @@ class Balance:
         df_sap_tmc = self.sap_tmc()
 
         df_merge_tmc = df_sap_tmc.join(df_report[0], on='Основное средство', how='left')
-        df_merge_tmc = df_sap_tmc.join(df_report[1], on='КрТекстМатериала', how='left')
+        # df_merge_tmc = df_sap_tmc.join(df_report[1], on='КрТекстМатериала', how='left')
         df_merge_tmc.write_excel('tmc.xlsx')
 
         return df_merge_tmc
@@ -125,10 +124,10 @@ class Balance:
 
 
 
-balance = Balance(site_name='KZ01')
-# #
-
-print(balance.merge_tmc(), balance.sap_tmc())
+# balance = Balance(site_name='KZ01')
+# # #
+#
+# print(balance.merge_tmc(), balance.read_report()[0])
 
 
 

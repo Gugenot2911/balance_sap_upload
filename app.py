@@ -85,12 +85,14 @@ def report():
 # @app.route('/name_report/', methods=['GET'])
 # def name_report():
 #     reports_list = df_report.files
-#
-#     for i in reports_list:
-#
-#
-#     return reports_list
+    return reports_list
 
+@app.route('/name_report/', methods=['GET'])
+def upload_reports():
+    file_name = df_report.files
+    report = df_report.read_reports(file_name, as_dataframes=False)
+
+    return report
 
 
 if __name__ == '__main__':
